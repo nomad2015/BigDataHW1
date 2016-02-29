@@ -42,7 +42,7 @@ rec_time StringToTime(string str) {
     for (it = str.begin(); (*it) != ':'; ++it) {
         tmp += *it;
     }
-    long int date = stoi(tmp.c_str());
+    long int date = atoi(tmp.c_str());
     
     //get seconds from string
     tmp.clear();
@@ -56,7 +56,7 @@ rec_time StringToTime(string str) {
     for (; it != str.end(); ++it) {
         tmp += *it;
     }
-    double m_seconds = stof(tmp.c_str());
+    double m_seconds = atof(tmp.c_str());
     
     result.date = date;
     result.seconds = seconds;
@@ -112,7 +112,7 @@ vector<record> StringToRecord (string source){
                 tmp_str += *it1;
                 ++it1;
             }
-            tmp_record.price =stof(tmp_str);
+            tmp_record.price =atof(tmp_str);
             tmp_str.clear();
             
             //get volume
@@ -121,7 +121,7 @@ vector<record> StringToRecord (string source){
                 tmp_str += *it1;
                 ++it1;
             }
-            tmp_record.volume = stoi(tmp_str);
+            tmp_record.volume = atoi(tmp_str);
             
             result_vec.push_back(tmp_record);
             buffer.clear();
@@ -141,7 +141,7 @@ string RecordToString(vector<record> & record_source) {
     stringstream ss;
     long int tmp1, tmp2, tmp3, tmp4, tmp;
     
-    for (auto it = record_source.begin(); it != record_source.end(); ++it) {
+    for (vector<record>::iterator it = record_source.begin(); it != record_source.end(); ++it) {
         tmp = (*it).time.seconds;
         tmp1 = tmp / 10000;
         tmp %= 10000;
@@ -278,7 +278,7 @@ bool NormalTest(vector<record> & source) {
 
 
 
-int main(int argc, const char * argv[]) {
+int main(int argc, char * argv[]) {
     
     int rank, nodes;
     
@@ -306,8 +306,8 @@ int main(int argc, const char * argv[]) {
     
     //scrub data into signal and noise
     vector<record> signal_vec, noise_vec;
-    pair<vector<record>, vector<record>> result_vec;
-    result_vec = ScrubRecord(record_test, 50);
+    pair<vector<record>, vector<record> > result_vec;
+    result_vec = ScrubRecord(record_vec, 50);
     signal_vec = result_vec.first;
     noise_vec = result_vec.second;
     
@@ -319,7 +319,7 @@ int main(int argc, const char * argv[]) {
     MPI_Offset output_offset = signal_str.size();
     MPI_Offset * send_offset = new long long;   //
     *send_offset=output_offset;
-    long long * rbuf = (long long *)malloc(size*sizeof(long long));
+    long long * rbuf = (long long *)malloc(nodes*sizeof(long long));
     MPI_Allgather( send_offset, 1, MPI_LONG, rbuf, 1, MPI_LONG, MPI_COMM_WORLD);
     
     MPI_Offset cumulative_offset = 0;
