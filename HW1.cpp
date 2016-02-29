@@ -320,7 +320,7 @@ int main(int argc, char * argv[]) {
     MPI_Offset * offset_send1 = new long long;
     *offset_send1 = offset_out;
 //    long long * buff_read = (long long *)malloc(nodes * sizeof(long long));
-    long long * buff_read = new long long [nodes];
+    long long * buff_read = new (long long) [nodes];
     
     MPI_Allgather( offset_send1, 1, MPI_LONG, buff_read, 1, MPI_LONG, MPI_COMM_WORLD);
     
@@ -346,7 +346,7 @@ int main(int argc, char * argv[]) {
     delete [] buff_read;
     
 //    buff_read = (long long *)malloc(nodes*sizeof(long long));
-    long long * buff_read = new long long [nodes];
+    long long * buff_read = new (long long) [nodes];
     
     MPI_Allgather( offset_send1, 1, MPI_LONG, buff_read, 1, MPI_LONG, MPI_COMM_WORLD);
     offset_cumu = 0;
