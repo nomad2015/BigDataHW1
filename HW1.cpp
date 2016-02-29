@@ -19,8 +19,6 @@
 #include <fstream>
 #include "mpi.h"
 
-#include "scrub.hpp"
-
 using namespace std;
 
 
