@@ -7,15 +7,13 @@
 //
 
 #include <string>
-#include <stdlib.h>
 #include <stdio.h>
-#include <iostream>
-#include <string>
-#include <iomanip>
-#include <vector>
-#include <fstream>
+#include <stdlib.h>
 #include <cmath>
 #include <sstream>
+#include <iostream>
+#include <iomanip>
+#include <vector>
 #include <fstream>
 #include "mpi.h"
 
@@ -87,7 +85,7 @@ vector<record> StringToRecord (string source){
         
         try {
             //get the first line
-            while ((*it) != '\n') {
+            while ( it != source.end() && (*it) != '\n') {
                 buffer += *it;
                 ++it;
             }
@@ -127,7 +125,7 @@ vector<record> StringToRecord (string source){
             if(it == source.end()) return result_vec;
             
         } catch (...) {
-            cout << "This line is wrong format! Ignor it!" << endl;
+            cout << "broken data" << endl;
         }
         
     }
@@ -154,8 +152,8 @@ string RecordToString(vector<record> & record_source) {
 }
 
 
-//Test if record 2 is later than record 1
-bool Later (record & r1, record & r2){
+//Test if record 2 is behind of record 1
+bool TimeOrder (record & r1, record & r2){
     if(r1.time.date != r2.time.date) {
         return (r1.time.date < r2.time.date) ? true : false;
     }
@@ -174,7 +172,7 @@ void SortWindow(vector<record> & rec_vector, int start, int end) {
     for (int i = 0; i < window_size; ++i)
     {
         for (int j = i+1; j< window_size; ++j)
-            if (Later(rec_vector[j], rec_vector[i]))
+            if (TimeOrder(rec_vector[j], rec_vector[i]))
             {
                 swap(rec_vector[j], rec_vector[i]);
             }
@@ -183,9 +181,10 @@ void SortWindow(vector<record> & rec_vector, int start, int end) {
 
 
 //scrub the date to two parts
-pair<vector<record>, vector<record> > ScrubRecord(vector<record> & source, int window_size, double tolerance = 0.30) {
+vector< vector<record> > ScrubRecord(vector<record> & source, int window_size, double tolerance = 0.30) {
     vector<record> signal;
     vector<record> noise;
+    vector< vector<record> > result;
     vector<record> a = source;
     int n = a.size();
     
@@ -204,7 +203,7 @@ pair<vector<record>, vector<record> > ScrubRecord(vector<record> & source, int w
     //sort sliding window
     for (int i = window_size; i < n; ++i) {
         
-        if (Later(a[i-1], source[i])) {
+        if (TimeOrder(a[i-1], source[i])) {
         }
         
         else {
@@ -237,12 +236,13 @@ pair<vector<record>, vector<record> > ScrubRecord(vector<record> & source, int w
         else signal.push_back(source[i]);
     }
     
-    return make_pair(signal, noise);
+    result.push_back(signal);
+    result.push_back(noise);
+    
+    return result;
 }
 
-
-
-
+//Test normality with JB method, confident level 99%
 bool NormalTest(vector<record> & source) {
     long N = source.size();
     vector<double> return_vec(N-1, 0);
@@ -281,75 +281,86 @@ int main(int argc, char * argv[]) {
     int rank, nodes;
     
     //start MPI
-    MPI_File fh;
+    MPI_File fh_1;
     MPI_Status status;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nodes);
-    MPI_File_open(MPI_COMM_WORLD,argv[1],MPI_MODE_RDONLY,MPI_INFO_NULL,&fh);
+    MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &fh_1);
     
-    MPI_Offset FILESIZE;//=stoi(argv[1]);
-    MPI_File_get_size(fh, &FILESIZE);
+    MPI_Offset file_size;
+    MPI_File_get_size(fh_1, &file_size);
     
-    int size_buf = FILESIZE/nodes;
+    int size_buf = file_size/nodes;
     char buff[size_buf/sizeof(char)];
     
     //read into buff
     clock_t t_scrub_start = clock();    //time to start reading
-    MPI_File_read_at(fh, rank*size_buf, buff, size_buf/sizeof(char), MPI_BYTE, &status);
+    MPI_File_read_at(fh_1, rank*size_buf, buff, size_buf/sizeof(char), MPI_BYTE, &status);
     
     //convert string to record vector
     vector<record> record_vec = StringToRecord(buff);
-    MPI_File_close(&fh);
+    MPI_File_close(&fh_1);
     
     //scrub data into signal and noise
     vector<record> signal_vec, noise_vec;
-    pair<vector<record>, vector<record> > result_vec;
+    vector< vector<record> > result_vec;
     result_vec = ScrubRecord(record_vec, 50);
-    signal_vec = result_vec.first;
-    noise_vec = result_vec.second;
+    
+    //get signal and noise vectors
+    signal_vec = result_vec[0];
+    noise_vec = result_vec[1];
     
     //time to finish scrubing
     clock_t t_scrub_end = clock();
     
     //output signal into signal.txt file
     string signal_str = RecordToString(signal_vec);
-    MPI_Offset output_offset = signal_str.size();
-    MPI_Offset * send_offset = new long long;   //
-    *send_offset=output_offset;
-    long long * rbuf = (long long *)malloc(nodes*sizeof(long long));
-    MPI_Allgather( send_offset, 1, MPI_LONG, rbuf, 1, MPI_LONG, MPI_COMM_WORLD);
+    MPI_Offset offset_out = signal_str.size();
+    MPI_Offset * offset_send1 = new long long;
+    *offset_send1 = offset_out;
+//    long long * buff_read = (long long *)malloc(nodes * sizeof(long long));
+    long long * buff_read = new long long [nodes];
     
-    MPI_Offset cumulative_offset = 0;
+    MPI_Allgather( offset_send1, 1, MPI_LONG, buff_read, 1, MPI_LONG, MPI_COMM_WORLD);
+    
+    MPI_Offset offset_cumu = 0;
     for (int i=0; i < rank; ++i) {
-        cumulative_offset += rbuf[i];
+        offset_cumu += buff_read[i];
     }
     MPI_File fh_out;
     MPI_File_open(MPI_COMM_WORLD, "signal.txt", MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh_out);
     char * p_signal = new char[signal_str.size()];
-    strcpy(p_signal,signal_str.c_str());
+    strcpy(p_signal, signal_str.c_str());
     
-    MPI_File_write_at(fh_out, cumulative_offset, p_signal, output_offset, MPI_BYTE, &status);
+    MPI_File_write_at(fh_out, offset_cumu, p_signal, offset_out, MPI_BYTE, &status);
     MPI_File_close(&fh_out);
     
     //output noise into noise.txt file
     string noise_str = RecordToString(noise_vec);
-    output_offset=noise_str.size();
-    delete send_offset;
-    send_offset = new long long;
-    *send_offset=output_offset;
-    free(rbuf);
-    rbuf = (long long *)malloc(nodes*sizeof(long long));
-    MPI_Allgather( send_offset, 1, MPI_LONG, rbuf, 1, MPI_LONG, MPI_COMM_WORLD);
-    cumulative_offset = 0;
+    offset_out = noise_str.size();
+    delete offset_send1;
+    offset_send1 = new long long;
+    *offset_send1 = offset_out;
+//    free(buff_read);
+    delete [] buff_read;
+    
+//    buff_read = (long long *)malloc(nodes*sizeof(long long));
+    long long * buff_read = new long long [nodes];
+    
+    MPI_Allgather( offset_send1, 1, MPI_LONG, buff_read, 1, MPI_LONG, MPI_COMM_WORLD);
+    offset_cumu = 0;
     for (int i = 0; i < rank; ++i){
-        cumulative_offset += rbuf[i];
+        offset_cumu += buff_read[i];
     }
     MPI_File_open(MPI_COMM_WORLD, "noise.txt", MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh_out);
-    char * p_noise=new char[noise_str.size()];
+    char * p_noise = new char[noise_str.size()];
     strcpy(p_noise,noise_str.c_str());
-    MPI_File_write_at(fh_out, cumulative_offset, p_noise, output_offset, MPI_BYTE, &status);
+    MPI_File_write_at(fh_out, offset_cumu, p_noise, offset_out, MPI_BYTE, &status);
     MPI_File_close(&fh_out);
+    
+    delete offset_send1;
+    delete [] buff_read;
     
     
     
