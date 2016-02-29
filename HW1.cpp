@@ -110,7 +110,7 @@ vector<record> StringToRecord (string source){
                 tmp_str += *it1;
                 ++it1;
             }
-            tmp_record.price =atof(tmp_str);
+            tmp_record.price = atof(tmp_str.c_str());
             tmp_str.clear();
             
             //get volume
@@ -119,7 +119,7 @@ vector<record> StringToRecord (string source){
                 tmp_str += *it1;
                 ++it1;
             }
-            tmp_record.volume = atoi(tmp_str);
+            tmp_record.volume = atoi(tmp_str.c_str());
             
             result_vec.push_back(tmp_record);
             buffer.clear();
@@ -339,7 +339,7 @@ int main(int argc, char * argv[]) {
     send_offset = new long long;
     *send_offset=output_offset;
     free(rbuf);
-    rbuf = (long long *)malloc(size*sizeof(long long));
+    rbuf = (long long *)malloc(nodes*sizeof(long long));
     MPI_Allgather( send_offset, 1, MPI_LONG, rbuf, 1, MPI_LONG, MPI_COMM_WORLD);
     cumulative_offset = 0;
     for (int i = 0; i < rank; ++i){
