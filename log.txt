@@ -1,0 +1,7 @@
+At node 0, time to read data to scrub: 28794
+Time to finish scrubing: 70052
+It took 41258 to scrub the data.
+
+Time to start normality test: 80888
+Time to finish nornality test: 81777
+It took 889 to do normality test.
