@@ -47,7 +47,7 @@ rec_time StringToTime(string str) {
     for (; (*it) != '.'; ++it) {
         if( (*it)!=':' ) tmp +=*it;
     }
-    long int seconds = stoi(tmp.c_str());
+    long int seconds = atoi(tmp.c_str());
     
     //get milli seconds from string
     tmp.clear();
