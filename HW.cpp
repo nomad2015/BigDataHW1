@@ -7,14 +7,14 @@
 //
 
 #include <string>
-#include <stdio.h>
 #include <stdlib.h>
-#include <cmath>
-#include <sstream>
+#include <stdio.h>
 #include <iostream>
 #include <iomanip>
 #include <vector>
 #include <fstream>
+#include <cmath>
+#include <sstream>
 #include "mpi.h"
 
 using namespace std;
@@ -26,7 +26,6 @@ struct rec_time {
     long int seconds;
     double milli_seconds;
 };
-
 
 //convert string to rec_time
 rec_time StringToTime(string str) {
@@ -61,13 +60,11 @@ rec_time StringToTime(string str) {
     return result;
 }
 
-
 struct record {
     rec_time time;
     float price;
     int volume;
 };
-
 
 //convert record string to record vector
 vector<record> StringToRecord (string source){
@@ -75,20 +72,17 @@ vector<record> StringToRecord (string source){
     string buffer;
     string::iterator it = source.begin();
     
-    //skip the first line for the possible broken data during slicing the big data file
-    while (it != source.end() && (*it) != '\n') {
-        ++it;
-    }
+    //skip the first line
+    while (it != source.end() && (*it) != '\n') { ++it; }
     ++it;
     
     for (; it != source.end(); ++it) {
-        
-        try {
             //get the first line
-            while ( it != source.end() && (*it) != '\n') {
+            while (it!=source.end()&&(*it) != '\n') {
                 buffer += *it;
                 ++it;
             }
+            if (it==source.end())return result_vec;
             
             string::iterator it1 = buffer.begin();
             string tmp_str;
@@ -123,11 +117,6 @@ vector<record> StringToRecord (string source){
             buffer.clear();
             
             if(it == source.end()) return result_vec;
-            
-        } catch (...) {
-            cout << "broken data" << endl;
-        }
-        
     }
     
     return result_vec;
@@ -136,7 +125,6 @@ vector<record> StringToRecord (string source){
 string RecordToString(vector<record> & record_source) {
     stringstream ss;
     long int tmp1, tmp2, tmp3, tmp4, tmp;
-    
     for (vector<record>::iterator it = record_source.begin(); it != record_source.end(); ++it) {
         tmp = (*it).time.seconds;
         tmp1 = tmp / 10000;
@@ -144,27 +132,26 @@ string RecordToString(vector<record> & record_source) {
         tmp2 = tmp / 100;
         tmp3 = tmp % 100;
         tmp4 = (long int)((*it).time.milli_seconds * 1000000);
-        
         ss << (*it).time.date << ':' << tmp1 << ':' << tmp2 << ':' << tmp3 << '.' << tmp4 << ',' << (*it).price << ',' << (*it).volume << '\n';
     }
-    
     return ss.str();
 }
 
-
 //Test if record 2 is behind of record 1
-bool TimeOrder (record & r1, record & r2){
+bool Helper (record & r1, record & r2){
     if(r1.time.date != r2.time.date) {
-        return (r1.time.date < r2.time.date) ? true : false;
+        if (r1.time.date < r2.time.date) { return true; }
+        else return false;
     }
     else if (r2.time.seconds != r2.time.seconds) {
-        return (r1.time.seconds < r2.time.seconds) ? true : false;
+        if (r1.time.seconds < r2.time.seconds) { return true; }
+        else return false;
     }
     else {
-        return (r1.time.milli_seconds < r2.time.milli_seconds) ? true : false;
+        if (r1.time.milli_seconds < r2.time.milli_seconds) { return true; }
+        else return false;
     }
 }
-
 
 //sort the slide window
 void SortWindow(vector<record> & rec_vector, int start, int end) {
@@ -172,7 +159,7 @@ void SortWindow(vector<record> & rec_vector, int start, int end) {
     for (int i = 0; i < window_size; ++i)
     {
         for (int j = i+1; j< window_size; ++j)
-            if (TimeOrder(rec_vector[j], rec_vector[i]))
+            if (Helper(rec_vector[j], rec_vector[i]))
             {
                 swap(rec_vector[j], rec_vector[i]);
             }
@@ -203,7 +190,7 @@ vector< vector<record> > ScrubRecord(vector<record> & source, int window_size, d
     //sort sliding window
     for (int i = window_size; i < n; ++i) {
         
-        if (TimeOrder(a[i-1], source[i])) {
+        if (Helper(a[i-1], source[i])) {
         }
         
         else {
@@ -238,11 +225,11 @@ vector< vector<record> > ScrubRecord(vector<record> & source, int window_size, d
     
     result.push_back(signal);
     result.push_back(noise);
-    
     return result;
 }
 
-//Test normality with JB method, confident level 99%
+
+//test normality with Jb method, confident level 99%
 bool NormalTest(vector<record> & source) {
     long N = source.size();
     vector<double> return_vec(N-1, 0);
@@ -252,8 +239,10 @@ bool NormalTest(vector<record> & source) {
         return_vec[i] = (source[i+1].price - source[i].price) / source[i].price;
     }
     
-    vector<long double> moment(4,0);    //first to forth moments
-    vector<long double> sum(4,0);       //sum, sum_square, sum_cubic, sum_quad
+    //first to forth moments
+    vector<long double> moment(4,0);
+    //sum, sum_square, sum_cubic, sum_quad
+    vector<long double> sum(4,0);
     
     for (int i=0; i < N-1; ++i) {
         sum[0] += return_vec[i];
@@ -278,36 +267,37 @@ bool NormalTest(vector<record> & source) {
 
 int main(int argc, char * argv[]) {
     
+    //rank: GPU order; nodes: total PGU numbers
     int rank, nodes;
     
     //start MPI
-    MPI_File fh_1;
+    MPI_File mpi_fh;
     MPI_Status status;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nodes);
-    MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &fh_1);
-    
-    MPI_Offset file_size;
-    MPI_File_get_size(fh_1, &file_size);
-    
-    int size_buf = file_size/nodes;
-    char buff[size_buf/sizeof(char)];
+    MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &mpi_fh);
+    MPI_Offset FILESIZE;
+    MPI_File_get_size(mpi_fh, &FILESIZE);
+
+    //initial buff for GPUs
+    char buff[(FILESIZE/nodes)/sizeof(char)];
+    int num=(FILESIZE/nodes)/sizeof(char);
     
     //read into buff
-    clock_t t_scrub_start = clock();    //time to start reading
-    MPI_File_read_at(fh_1, rank*size_buf, buff, size_buf/sizeof(char), MPI_BYTE, &status);
+    //time to start reading
+    clock_t t_scrub_start = clock();
+    MPI_File_read_at(mpi_fh, rank*(FILESIZE/nodes), buff, num, MPI_BYTE, &status);
     
     //convert string to record vector
-    vector<record> record_vec = StringToRecord(buff);
-    MPI_File_close(&fh_1);
-    
+    string buff_s = buff;
+    vector<record> record_vec = StringToRecord(buff_s);
+    MPI_File_close(&mpi_fh);
+
     //scrub data into signal and noise
     vector<record> signal_vec, noise_vec;
-    vector< vector<record> > result_vec;
+    vector<vector<record> > result_vec;
     result_vec = ScrubRecord(record_vec, 50);
-    
-    //get signal and noise vectors
     signal_vec = result_vec[0];
     noise_vec = result_vec[1];
     
@@ -316,51 +306,58 @@ int main(int argc, char * argv[]) {
     
     //output signal into signal.txt file
     string signal_str = RecordToString(signal_vec);
-    MPI_Offset offset_out = signal_str.size();
-    MPI_Offset * offset_send1 = new long long;
-    *offset_send1 = offset_out;
-//    long long * buff_read = (long long *)malloc(nodes * sizeof(long long));
-    long long * buff_read = new (long long) [nodes];
+    MPI_Offset output_offset = signal_str.size();
     
-    MPI_Allgather( offset_send1, 1, MPI_LONG, buff_read, 1, MPI_LONG, MPI_COMM_WORLD);
+    //set offset position
+    MPI_Offset * send_offset = new long long;
+    *send_offset=output_offset;
     
-    MPI_Offset offset_cumu = 0;
-    for (int i=0; i < rank; ++i) {
-        offset_cumu += buff_read[i];
-    }
+    //malloc array for output file
+    long long * rbuf = (long long *)malloc( nodes*sizeof(long long) );
+    MPI_Allgather( send_offset, 1, MPI_LONG, rbuf, 1, MPI_LONG, MPI_COMM_WORLD);
+    
+    //calculate total offset position
+    MPI_Offset cumulative_offset = 0;
+    for (int i=0; i < rank; ++i) { cumulative_offset += rbuf[i]; }
+    
+    //set output file signal.txt
     MPI_File fh_out;
     MPI_File_open(MPI_COMM_WORLD, "signal.txt", MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh_out);
     char * p_signal = new char[signal_str.size()];
-    strcpy(p_signal, signal_str.c_str());
+    strcpy(p_signal,signal_str.c_str());
     
-    MPI_File_write_at(fh_out, offset_cumu, p_signal, offset_out, MPI_BYTE, &status);
+    //write file
+    MPI_File_write_at(fh_out, cumulative_offset, p_signal, output_offset, MPI_BYTE, &status);
     MPI_File_close(&fh_out);
     
     //output noise into noise.txt file
+    //convert noise record to string stream
     string noise_str = RecordToString(noise_vec);
-    offset_out = noise_str.size();
-    delete offset_send1;
-    offset_send1 = new long long;
-    *offset_send1 = offset_out;
-//    free(buff_read);
-    delete [] buff_read;
+    output_offset = noise_str.size();
     
-//    buff_read = (long long *)malloc(nodes*sizeof(long long));
-    long long * buff_read = new (long long) [nodes];
+    //set offset position for noise
+    delete send_offset;
+    send_offset = new long long;
+    *send_offset = output_offset;
     
-    MPI_Allgather( offset_send1, 1, MPI_LONG, buff_read, 1, MPI_LONG, MPI_COMM_WORLD);
-    offset_cumu = 0;
-    for (int i = 0; i < rank; ++i){
-        offset_cumu += buff_read[i];
-    }
+    //malloc array for noise file
+    free(rbuf);
+    rbuf = (long long *)malloc(nodes*sizeof(long long));
+    MPI_Allgather( send_offset, 1, MPI_LONG, rbuf, 1, MPI_LONG, MPI_COMM_WORLD);
+    
+    //calculate total offset position
+    cumulative_offset = 0;
+    for (int i = 0; i < rank; ++i){ cumulative_offset += rbuf[i]; }
+    
+    //set output file noise.txt
     MPI_File_open(MPI_COMM_WORLD, "noise.txt", MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh_out);
-    char * p_noise = new char[noise_str.size()];
+    char * p_noise=new char[noise_str.size()];
     strcpy(p_noise,noise_str.c_str());
-    MPI_File_write_at(fh_out, offset_cumu, p_noise, offset_out, MPI_BYTE, &status);
-    MPI_File_close(&fh_out);
     
-    delete offset_send1;
-    delete [] buff_read;
+    //write file
+    MPI_File_write_at(fh_out, cumulative_offset, p_noise, output_offset, MPI_BYTE, &status);
+    
+    MPI_File_close(&fh_out);
     
     
     
@@ -368,15 +365,12 @@ int main(int argc, char * argv[]) {
     //time to start normality test
     clock_t t_nor_start = clock();
     if (rank == 0) {
-        
         bool normality_result = NormalTest(signal_vec);
-        
         stringstream ss;
         if (normality_result) {
             ss << "Normality test passed with JB method!" <<endl;
         }
         else ss << "Normality test did not pass with JB method!" << endl;
-        
         ofstream out_file;
         out_file.open("NormalityTest.txt");
         out_file << ss.str();
@@ -384,6 +378,7 @@ int main(int argc, char * argv[]) {
     }
     //time to finish normality test
     clock_t t_nor_end = clock();
+    
     
     
     //write log file
@@ -396,7 +391,9 @@ int main(int argc, char * argv[]) {
         log_file.close();
     }
     
+    
     MPI_Finalize();
+    
     return 0;
-
+    
 }
